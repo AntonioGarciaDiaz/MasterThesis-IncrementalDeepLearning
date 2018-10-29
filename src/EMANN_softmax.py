@@ -6,8 +6,10 @@ The algorithm used on these modules is mostly a recreation of the original
 EMANN algorithm, except it uses the softmax function as an
 activation function (instead of sigmoid) for all layers.
 
-Modification of Wolfgang Beyer's code form his tutorial:
+Modification of Wolfgang Beyer's code from his tutorial:
 "Simple Image Classification Models for the CIFAR-10 dataset using TensorFlow".
+https://www.wolfib.com/Image-Recognition-Intro-Part-1/
+https://www.wolfib.com/Image-Recognition-Intro-Part-2/
 '''
 
 # Needed for compatibility between Python 2 and 3.
@@ -111,7 +113,7 @@ class Module:
         # ------------------LAYER #2------------------
         # Define the layer's weights as a list of vectors.
         # N.B.: The matrix used for backpropagation is found by stacking
-        #       these vectors along axis=0 (transpose of just staking them).
+        #       these vectors along axis=0 (just staking them).
         self.w_2 = []
         for unit in range(self.a_1_units):
             self.w_2.append(tf.get_variable(
@@ -126,11 +128,11 @@ class Module:
         # Keep a reference to the input channels.
         self.a_0 = input_channel
         # Define the hidden units' output (w.r.t. input units and weights).
-        # N.B.: The activation function is sigmoid (value between 0 and 1).
+        # N.B.: The activation function is softmax (value between 0 and 1).
         self.z_1 = tf.matmul(self.a_0, tf.stack(self.w_1, axis=1))
         self.a_1 = tf.nn.softmax(self.z_1)
         # Define the output units' output (w.r.t. hidden units and weights).
-        # N.B.: The activation function is also the sigmoid.
+        # N.B.: The activation function is also the softmax.
         self.z_2 = tf.matmul(self.a_1, tf.stack(self.w_2, axis=0))
         self.a_2 = tf.nn.softmax(self.z_2)
 

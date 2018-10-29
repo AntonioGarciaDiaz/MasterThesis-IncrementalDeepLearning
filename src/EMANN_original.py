@@ -8,8 +8,10 @@ SALOME Tristan, BERSINI Hugues,
 An Algorithm for Self-Structuring Neural Net Classifiers,
 IRIDIA - Universite Libre de Bruxelles, June 28 - July 2 1994.
 
-Modification of Wolfgang Beyer's code form his tutorial:
+Modification of Wolfgang Beyer's code from his tutorial:
 "Simple Image Classification Models for the CIFAR-10 dataset using TensorFlow".
+https://www.wolfib.com/Image-Recognition-Intro-Part-1/
+https://www.wolfib.com/Image-Recognition-Intro-Part-2/
 '''
 
 # Needed for compatibility between Python 2 and 3.

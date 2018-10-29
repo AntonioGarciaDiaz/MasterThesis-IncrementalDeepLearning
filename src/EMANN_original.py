@@ -119,7 +119,7 @@ class Module:
         # ------------------LAYER #2------------------
         # Define the layer's weights as a list of vectors.
         # N.B.: The matrix used for backpropagation is found by stacking
-        #       these vectors along axis=0 (transpose of just staking them).
+        #       these vectors along axis=0 (just staking them).
         self.w_2 = []
         for unit in range(self.a_1_units):
             self.w_2.append(tf.get_variable(

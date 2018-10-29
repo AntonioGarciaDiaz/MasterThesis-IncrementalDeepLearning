@@ -7,8 +7,10 @@ EMANN algorithm, except it uses the Rectified Linear Unit (ReLU) as an
 activation function (instead of sigmoid) for the hidden layer, and the
 softmax function for the output layer.
 
-Modification of Wolfgang Beyer's code form his tutorial:
+Modification of Wolfgang Beyer's code from his tutorial:
 "Simple Image Classification Models for the CIFAR-10 dataset using TensorFlow".
+https://www.wolfib.com/Image-Recognition-Intro-Part-1/
+https://www.wolfib.com/Image-Recognition-Intro-Part-2/
 '''
 
 # Needed for compatibility between Python 2 and 3.
@@ -143,11 +145,11 @@ class Module:
         # Keep a reference to the input channels.
         self.a_0 = input_channel
         # Define the hidden units' output (w.r.t. input units and weights).
-        # N.B.: The activation function is sigmoid (value between 0 and 1).
+        # N.B.: The activation function is ReLU (value between 0 and infinite).
         self.z_1 = tf.matmul(self.a_0, tf.stack(self.w_1, axis=1))
         self.a_1 = tf.nn.leaky_relu(self.z_1, alpha=ALPHA)
         # Define the output units' output (w.r.t. hidden units and weights).
-        # N.B.: The activation function is also the sigmoid.
+        # N.B.: The activation function is softmax (value between 0 and 1).
         self.z_2 = tf.matmul(self.a_1, tf.stack(self.w_2, axis=0))
         self.a_2 = tf.nn.softmax(self.z_2)
 

@@ -16,6 +16,7 @@ import tensorflow as tf
 import time
 from datetime import datetime
 import os
+import sys
 # data_helpers.py contains functions for loading and preparing the dataset.
 import data_helpers
 # two_layer_fc.py contains the Module class, which defines a 2-layer NN.
@@ -43,42 +44,41 @@ flags = tf.flags
 FLAGS = flags.FLAGS
 # Parameters related to training epochs.
 flags.DEFINE_integer('batch_size', 400, 'Batch size, divisor of dataset size.')
-flags.DEFINE_float('reg_constant', 0.1, 'Regularization constant for weights.')
 flags.DEFINE_float('learning_rate', 1e-4,
                    'Learning rate for the training epoch (backpropagation).')
 # Parameters used in EMANN algorithms (with alt values).
-flags.DEFINE_integer('uselessness_tresh', 0.15,
-                     'Minimum connection strength for a unit to be useless.')
-flags.DEFINE_integer('settling_tresh', 0.5,
-                     'Maximum connection strength for a unit to be settled.')
-flags.DEFINE_integer('ascension_tresh', 400,
+flags.DEFINE_float('uselessness_tresh', 0.15,
+                   'Minimum connection strength for a unit to be useless.')
+flags.DEFINE_float('settling_tresh', 0.5,
+                   'Maximum connection strength for a unit to be settled.')
+flags.DEFINE_integer('ascension_tresh', 200,
                      'During ascension, number of epochs for adding a unit.')
-flags.DEFINE_integer('uselessness_tresh_alt', 0.013,
-                     'Different uselessness treshold for the first module.')
-flags.DEFINE_integer('settling_tresh_alt', 0.019,
-                     'Different settling treshold for the first module.')
+flags.DEFINE_float('uselessness_tresh_alt', 0.013,
+                   'Different uselessness treshold for the first module.')
+flags.DEFINE_float('settling_tresh_alt', 0.016,
+                   'Different settling treshold for the first module.')
 flags.DEFINE_integer('ascension_tresh_alt', 200,
                      'Different ascension treshold for the first module.')
 # Parameters used in EMANN algorithms (without alt values).
 flags.DEFINE_integer('initial_unit_num', 1,
-                     'Initial number of units in a module.')
+                     'Initial number of units in the first module.')
 flags.DEFINE_integer('unit_increase', 1,
                      'Number of units added each ascension_thresh.')
 flags.DEFINE_integer('ascension_limit', 120,
                      'Maximum number of neurons before stopping ascension.')
-flags.DEFINE_integer('patience_param', 8000,
+flags.DEFINE_integer('patience_param', 2000,
                      'During improvement, number of epochs before stopping.')
-flags.DEFINE_integer('improvement_tresh', 5e-3,
-                     'Minimum MSE difference for adding a new module.')
+flags.DEFINE_float('improvement_tresh', 5e-3,
+                   'Minimum MSE difference for adding a new module.')
 # Parameters related to the algorithm's implementation.
 flags.DEFINE_integer('check_tresh', 100,
                      'Number of epochs to skip before the network is checked.')
 flags.DEFINE_string('train_dir', 'tf_logs',
                     'Directory for the program to place the training logs.')
 
-FLAGS._parse_flags()
+FLAGS(sys.argv)
 print('\n-------SELECTED VALUES FOR NN PARAMETERS-------')
-for attr, value in sorted(FLAGS.__flags.items()):
+for attr, value in sorted(FLAGS.flag_values_dict().items()):
     print('{} = {}'.format(attr, value))
 print()
 
@@ -147,9 +147,8 @@ def EMANN_ascension(sess, new_module, labels_placeholder, batches,
     Returns:
         None.
     '''
-    # From the module, get definitions for the following operations:
-    # loss function, training epoch, and accuracy calculation.
-    loss = new_module.loss(labels_placeholder)
+    # From the module, get definitions for the training epoch
+    # and the accuracy calculation.
     train_epoch = new_module.training(labels_placeholder, FLAGS.learning_rate)
     accuracy = new_module.evaluation(labels_placeholder)
 
@@ -167,15 +166,13 @@ def EMANN_ascension(sess, new_module, labels_placeholder, batches,
         # Get the (random) input data batch corresponding to epoch i.
         feed_dict = get_next_feed_dict(batches)
         # Perform a new training epoch.
-        sess.run([train_epoch, loss], feed_dict=feed_dict)
+        sess.run(train_epoch, feed_dict=feed_dict)
 
         # Every ascension_tresh epochs, add unit_increase units to the hidden layer.
         if num_epochs % ascension_tresh == 0:
             # Add the new unit and update the graph.
-            new_module.add_new_unit(sess, FLAGS.unit_increase,
-                                    reg_constant=FLAGS.reg_constant)
-            # Update the definitions of loss, training epoch, and accuracy.
-            loss = new_module.loss(labels_placeholder)
+            new_module.add_new_unit(sess, FLAGS.unit_increase)
+            # Update the definitions of training epoch and accuracy.
             train_epoch = new_module.training(labels_placeholder,
                                               FLAGS.learning_rate)
             accuracy = new_module.evaluation(labels_placeholder)
@@ -205,9 +202,8 @@ def EMANN_improvement(sess, new_module, labels_placeholder, batches,
     Returns:
         None.
     '''
-    # From the module, get definitions for the following operations:
-    # loss function, training epoch, and accuracy calculation.
-    loss = new_module.loss(labels_placeholder)
+    # From the module, get definitions for the training epoch
+    # and the accuracy calculation.
     train_epoch = new_module.training(labels_placeholder, FLAGS.learning_rate)
     accuracy = new_module.evaluation(labels_placeholder)
 
@@ -223,7 +219,7 @@ def EMANN_improvement(sess, new_module, labels_placeholder, batches,
         # Get the (random) input data batch corresponding to epoch i.
         feed_dict = get_next_feed_dict(batches)
         # Perform a new training epoch.
-        sess.run([train_epoch, loss], feed_dict=feed_dict)
+        sess.run(train_epoch, feed_dict=feed_dict)
 
         # Every check_tresh epochs, check the state of the module.
         if num_epochs % FLAGS.check_tresh == 0:
@@ -236,10 +232,8 @@ def EMANN_improvement(sess, new_module, labels_placeholder, batches,
                 patience_countdown = FLAGS.patience_param + 1
 
                 # Add the new unit and update the graph.
-                new_module.add_new_unit(sess, 1,
-                                        reg_constant=FLAGS.reg_constant)
-                # Update the definitions of loss, training epoch, and accuracy.
-                loss = new_module.loss(labels_placeholder)
+                new_module.add_new_unit(sess, 1)
+                # Update the definitions of training epoch and accuracy.
                 train_epoch = new_module.training(labels_placeholder,
                                                   FLAGS.learning_rate)
                 accuracy = new_module.evaluation(labels_placeholder)
@@ -258,7 +252,8 @@ def EMANN_improvement(sess, new_module, labels_placeholder, batches,
 
 
 def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
-                          labels_placeholder, batches, test_feed_dict, logs):
+                          initial_unit_num, labels_placeholder, batches,
+                          test_feed_dict, logs):
     '''
     Run the EMANN algorithm to train a module (network with one hidden layer).
 
@@ -267,6 +262,7 @@ def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
         module_ID: Identifier for the module to be built.
         inputs_placeholder: Represents the inputs for this module.
         input_num: Number of input channels for this module.
+        initial_unit_num: Initial number of units in the hidden layer
         labels_placeholder: Represents the expected outputs for this module.
         batches: A generator of random data batches used for training.
         test_feed_dict: A spare data batch used for testing.
@@ -278,11 +274,9 @@ def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
     print('Setting up the new module...', end='')
     # Create the module, with initial_unit_num units in its hidden layer.
     new_module = Module(module_ID, inputs_placeholder, input_num,
-                        FLAGS.initial_unit_num, CLASSES,
-                        reg_constant=FLAGS.reg_constant)
-    # From the module, get definitions for the following operations:
-    # loss function, training epoch, and accuracy calculation.
-    loss = new_module.loss(labels_placeholder)
+                        initial_unit_num, CLASSES)
+    # From the module, get definitions for the training epoch
+    # and the accuracy calculation.
     train_epoch = new_module.training(labels_placeholder, FLAGS.learning_rate)
     accuracy = new_module.evaluation(labels_placeholder)
     print(' DONE!')
@@ -302,7 +296,7 @@ def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
     # Get the (random) input data batch corresponding to epoch i.
     feed_dict = get_next_feed_dict(batches)
     # Perform the first training epoch and increase the epoch counter.
-    sess.run([train_epoch, loss], feed_dict=feed_dict)
+    sess.run(train_epoch, feed_dict=feed_dict)
     units_settled = new_module.units_settled(settling_tresh)
     num_epochs += 1
 
@@ -345,8 +339,7 @@ def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
         new_module.units_prune(FLAGS.uselessness_tresh_alt)
     else:
         new_module.units_prune(FLAGS.uselessness_tresh)
-    # Update the definitions of loss, training epoch, and accuracy.
-    loss = new_module.loss(labels_placeholder)
+    # Update the definitions of training epoch and accuracy.
     train_epoch = new_module.training(labels_placeholder, FLAGS.learning_rate)
     accuracy = new_module.evaluation(labels_placeholder)
 
@@ -371,7 +364,7 @@ def EMANN_module_training(sess, module_ID, inputs_placeholder, input_num,
         images_batch, labels_batch = zip(*batch)
         feed_dict = get_next_feed_dict(batches)
         # Perform a new training epoch.
-        sess.run([train_epoch, loss], feed_dict=feed_dict)
+        sess.run(train_epoch, feed_dict=feed_dict)
 
         # Every check_tresh epochs, check the state of the module.
         if num_epochs % FLAGS.check_tresh == 0:
@@ -470,18 +463,23 @@ with tf.Session() as sess:
         FLAGS.patience_param))
 
     # Itteratively build a certain number of modules (layers).
-    for i in range(1):
+    initial_unit_num = FLAGS.initial_unit_num
+    for i in range(3):
         # Build a new module and add it to the modules list.
         print('Building module number: ', len(modules_list))
         log_writer.write('\nMODULE NUMBER {}\n'.format(len(modules_list)))
         new_module = EMANN_module_training(sess, len(modules_list),
                                            input_list[-1], input_num,
+                                           initial_unit_num,
                                            labels_placeholder,
                                            batches, test_feed_dict,
                                            log_writer)
         modules_list.append(new_module)
+        # New modules connect to the network through the previous hidden layer.
         input_list.append(new_module.a_1)
         input_num = new_module.a_1_units
+        # New modules start with as many hidden units as the previous module.
+        initial_unit_num = new_module.a_1_units
 
     # After all EMANN modules has finished training, the training stops.
     print('\n---------END OF EMANN TRAINING SESSION---------\n')

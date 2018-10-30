@@ -83,7 +83,7 @@ class Module:
     '''Defines a module, a 2-layer fully-connected neural network'''
 
     def __init__(self, module_ID, input_channel, input_units, hidden_units,
-                 classes, reg_constant=0):
+                 classes):
         '''
         Initialization method.
         Sets the initial weights and biases for each layer in the network.
@@ -95,7 +95,6 @@ class Module:
             input_units: Number of input entry units (i.e. color channels).
             hidden_units: Number of initial hidden units.
             classes: Number of image classes (number of possible labels).
-            reg_constant: Regularization constant (default 0).
 
         Returns:
             None.
@@ -120,11 +119,7 @@ class Module:
                 # Weights are initialized to normally distributed variables,
                 # the standard deviation being 1/sqrt(a_0_units).
                 initializer=tf.truncated_normal_initializer(
-                    stddev=1.0 / np.sqrt(float(self.a_0_units))),
-                # L2-regularization adds the sum of the squares of all the
-                # weights in the network to the loss function. The importance
-                # of this effect is controlled by reg_constant.
-                regularizer=tf.contrib.layers.l2_regularizer(reg_constant)
+                    stddev=1.0 / np.sqrt(float(self.a_0_units)))
             ))
 
         # ------------------LAYER #2------------------
@@ -137,8 +132,7 @@ class Module:
                 name='m_'+str(self.module_ID)+'__w_2_'+str(unit+1),
                 shape=[self.a_2_units],
                 initializer=tf.truncated_normal_initializer(
-                    stddev=1.0 / np.sqrt(float(self.a_1_units))),
-                regularizer=tf.contrib.layers.l2_regularizer(reg_constant)
+                    stddev=1.0 / np.sqrt(float(self.a_1_units)))
             ))
 
         # -----------DEFINE THE FORWARD PASS----------
@@ -153,7 +147,7 @@ class Module:
         self.z_2 = tf.matmul(self.a_1, tf.stack(self.w_2, axis=0))
         self.a_2 = tf.nn.softmax(self.z_2)
 
-    def add_new_unit(self, sess, unit_count, reg_constant=0):
+    def add_new_unit(self, sess, unit_count):
         '''
         Adds new units to the module's hidden layer (new weight vectors).
         Then redefines the forward pass to take the new unit into account.
@@ -161,7 +155,6 @@ class Module:
         Args:
             sess: Ongoing TensorFlow session.
             unit_count: Number of new units to be added.
-            reg_constant: Regularization constant (default 0).
 
         Returns:
             None.
@@ -173,15 +166,13 @@ class Module:
                 name='m_'+str(self.module_ID)+'__w_1_'+str(self.a_1_units+1),
                 shape=[self.a_0_units],
                 initializer=tf.truncated_normal_initializer(
-                    stddev=1.0 / np.sqrt(float(self.a_0_units))),
-                regularizer=tf.contrib.layers.l2_regularizer(reg_constant)
+                    stddev=1.0 / np.sqrt(float(self.a_0_units)))
             ))
             self.w_2.append(tf.get_variable(
                 name='m_'+str(self.module_ID)+'__w_2_'+str(self.a_1_units+1),
                 shape=[self.a_2_units],
                 initializer=tf.truncated_normal_initializer(
-                    stddev=1.0 / np.sqrt(float(self.a_1_units))),
-                regularizer=tf.contrib.layers.l2_regularizer(reg_constant)
+                    stddev=1.0 / np.sqrt(float(self.a_1_units)))
             ))
             # Initializes these new weight vectors.
             sess.run(self.w_1[-1].initializer)
@@ -283,65 +274,17 @@ class Module:
         Returns:
             train_epoch: Operation for a training epoch.
         '''
-        # We use the sigmoid prime function to backpropagate the difference
-        # between a_2 and y, and deduce how to alter all the variables.
-
-        # ------------------LAYER #2------------------
         # Difference between probabilities and actual labels.
         # N.B.: One-hot encoding converts the labels into probabilities.
         diff = tf.subtract(self.a_2, tf.one_hot(y, self.a_2_units))
         # Difference between old and new values for weights.
-        d_z_2 = tf.multiply(diff, ReLU_prime(self.z_2))
-        d_w_2 = tf.unstack(tf.matmul(tf.transpose(self.a_1), d_z_2), axis=0)
+        # Cost function is the square difference.
+        cost = tf.multiply(diff, diff)
 
-        # ------------------LAYER #1------------------
-        # Difference between hidden layer values and its expected values.
-        d_a_1 = tf.matmul(d_z_2, tf.transpose(tf.stack(self.w_2, axis=0)))
-        # Difference between old and new values for weights.
-        d_z_1 = tf.multiply(d_a_1, softmax_prime(self.z_1))
-        d_w_1 = tf.unstack(tf.matmul(tf.transpose(self.a_0), d_z_1), axis=1)
-
-        # Use the deduced differences to update the weights.
-        # N.B.: The differences are in fact modulated by the learning rate.
-        train_epoch = []
-        for unit in range(self.a_1_units):
-            train_epoch.append(tf.assign(self.w_1[unit], tf.subtract(
-                self.w_1[unit], tf.multiply(eta, d_w_1[unit]))))
-            train_epoch.append(tf.assign(self.w_2[unit], tf.subtract(
-                self.w_2[unit], tf.multiply(eta, d_w_2[unit]))))
+        # Use the cost to update the weights, modulated by the learning rate.
+        train_epoch = tf.train.GradientDescentOptimizer(eta).minimize(cost)
 
         return train_epoch
-
-    def loss(self, y):
-        '''
-        Define how the loss value is calculated from the logits (z_2)
-        and the actual labels (y).
-        N.B: Cross entropy compares the "score ranges" probability
-             distribution with the actual distribution
-             (correct class = 1, others = 0).
-
-        Args:
-            y: Labels tensor, of type int64 - [batch size].
-
-        Returns:
-            loss: Loss tensor, of type float32.
-        '''
-        with tf.name_scope('Loss'):
-            # Cross entropy operation between logits and labels.
-            # N.B.: Use z_2 because a_2 already is a softmax (of z_2).
-            # N.B.2: One-hot encoding converts the labels into probabilities.
-            cross_entropy = tf.reduce_mean(
-                tf.nn.softmax_cross_entropy_with_logits(
-                    logits=self.z_2, labels=tf.one_hot(y, self.a_2_units),
-                    name='cross_entropy'))
-
-            # Operation for the final loss function.
-            # N.B.: We add all the L2-regularization terms
-            #       (squares of weights, multiplied by the reg_constant).
-            loss = cross_entropy + tf.add_n(tf.get_collection(
-                tf.GraphKeys.REGULARIZATION_LOSSES))
-
-        return loss
 
     def evaluation(self, y):
         '''
